@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "link_layer.h": "c",
+        "application_layer.h": "c",
+        "signal.h": "c"
+    }
+}
