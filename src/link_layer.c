@@ -194,20 +194,19 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
             printf("repeat\n");
             continue;
         }
-
-        switch (sendReceiveValidate) {
-            case 0:
-                sendReceiveValidate = 1;
-                break;
-            case 1: 
-                sendReceiveValidate = 0;
-                break;
-            
-            default:
-                return -1;
-        }  
     }
 
+    switch (sendReceiveValidate) {
+        case 0:
+            sendReceiveValidate = 1;
+            break;
+        case 1: 
+            sendReceiveValidate = 0;
+            break;
+        
+        default:
+            return -1;
+    }  
     printf("bytesWritten: %d\n", bytesWritten);
 
     return bytesWritten; // troquei totalBufferSize por fullLength
