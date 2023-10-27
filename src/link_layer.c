@@ -144,8 +144,8 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
 
     unsigned char bcc2 = buf[0];
 
-    for (int i = 0; i < bufSize-1; i++) {
-        bcc2 ^= buf[i + 1];
+    for (int i = 1; i < bufSize; i++) {
+        bcc2 ^= buf[i];
     }
 
     buf_inf[3 + bufSize + 1] = bcc2;
@@ -163,71 +163,54 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
         }
     }
     printf("fullLength size: %d\n", fullLength);
-    int bytesWritten;
+    int bytesWritten = 0;
     int sentData = FALSE;
     alarmEnabled = FALSE;
+    int resend = 1;
+    int repeat = 1;
 
     (void)signal(SIGALRM, alarmHandler);
     
     while (!sentData) {
-        bytesWritten = sendInfoTrama(fd, buf_inf, fullLength);
-
-        printf("bytesWrittenInfo: %d\n", bytesWritten);
-
-        if (bytesWritten < 0) {
-            sleep(1);
-
-            if (tcsetattr(fd, TCSANOW, &oldtio) == -1) {
-                perror("tcsetattr");
-                return -1;
-            }
-        }
-
+        resend = setStateMachineWrite(fd, buf_inf, fullLength, bytesWritten, frameNumberByte);
         
-        unsigned char wantedBytes[2];
-        
-        if (frameNumberByte == 0x00) {
-            wantedBytes[0] = 0x85;
-            wantedBytes[1] = 0x01;
+        // printf("Received S Trama\n");
+
+        // printf("Resend LinkLayer llwrite: %d\n", resend);
+        // printf("repeat: %d\n", repeat);
+        // printf("resend: %d\n", resend);
+
+        if (resend == 1) {
+            printf("Received REJ. Sending another Trama. RESEND: %d\n", resend);
         }
 
-        else if (frameNumberByte == 0x40) {
-            wantedBytes[0] = 0x05;
-            wantedBytes[1] = 0x81;
-        }
-
-        unsigned char buf_super[BUF_SIZE] = {0};
-
-        int resend = setStateMachineReceiverSup(fd, buf_super, 0x03, wantedBytes); // analisa a supervisão
-        printf("Resend: %d\n", resend);
-
-        if (resend == 0) {
+        else if (resend == 0 && repeat == 0) {
             sentData = TRUE;
-            printf("here\n");
+            printf("sentData\n");
         }
 
-        else if (resend == 1) {
-            printf("Received REJ. Sending another Trama\n");
+        else if (resend == 0 && repeat == 1) {
+            repeat = 0;
+            printf("repeat\n");
+            continue;
         }
+
+        switch (sendReceiveValidate) {
+            case 0:
+                sendReceiveValidate = 1;
+                break;
+            case 1: 
+                sendReceiveValidate = 0;
+                break;
+            
+            default:
+                return -1;
+        }  
     }
 
-    printf("Received S Trama\n");
+    printf("bytesWritten: %d\n", bytesWritten);
 
-    switch (sendReceiveValidate) {
-        case 0:
-            sendReceiveValidate = 1;
-            break;
-        case 1: 
-            sendReceiveValidate = 0;
-            break;
-        
-        default:
-            return -1;
-    }
-    
-    fullLength = bytesWritten - 6; // troquei totalBufferSize por fullLength
-    
-    return fullLength; // troquei totalBufferSize por fullLength
+    return bytesWritten; // troquei totalBufferSize por fullLength
 }
 
 ////////////////////////////////////////////////
@@ -235,24 +218,22 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
 ////////////////////////////////////////////////
 int llread(int fd, unsigned char *packet) {
     int nbytes;
+    int bytesInfo;
     int bufferIsFull = FALSE;
-    int infoSize = 0;
 
-    unsigned char buf_information[(1029 * 2) + 5]; // 1029 * 2 = All bytes that can suffer byte stuffing and therefore duplicate (packet + bcc2). +5 for the inaltered bytes (flag, a, c, bcc1 and flag)
-    unsigned char buf_inf[(1029 * 2) + 5];
-    
+    unsigned char buf_information[1024];
+    unsigned char buf_inf[1024];
+
     while (!bufferIsFull) {
         printf("HERE 3\n");
     
-        setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS);
+        bytesInfo = setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS);
 
-        infoSize = sizeof(buf_information);
-        printf("buf_information size2: %d\n", infoSize);
+        printf("Received I Trama. Bytes Received: %d\n", bytesInfo);
 
-        printf("Received I Trama\n");
-
-        nbytes = byte_destuffing(buf_information, infoSize);
+        nbytes = byte_destuffing(buf_information, bytesInfo);
         printf("Bytes destuffing: %d\n", nbytes);
+
         if (nbytes < 0) {
             sleep(1);
 
@@ -263,24 +244,40 @@ int llread(int fd, unsigned char *packet) {
         }
 
         int receiveSendByte;
-
         if (buf_information[2] == 0x00) {
+            //printf("buf_information[2] = 0x%02X\n\n", (unsigned int)(buf_information[2] & 0xFF));
             receiveSendByte = 0;
         }
         else if (buf_information[2] == 0x40) {
+            //printf("buf_information[2] = 0x%02X\n\n", (unsigned int)(buf_information[2] & 0xFF));
             receiveSendByte = 1;
         }
-
         unsigned char bcc2 = buf_information[4];
 
-        for (int i = 0; i < (nbytes-6)-1; i++) {
-            bcc2 ^= buf_information[i + 4 + 1];
+        for (int i = 1; i < bytesInfo - 6; i++) {
+            bcc2 ^= buf_information[i + 4];
         }
 
-        if (buf_information[nbytes - 2] == bcc2) { // verificar que bcc2 está correto
-            // duplicated trama. Discard information
-            if (receiveSendByte != sendReceiveValidate) { // valor de controlo no read for diferente no write, respetivamente
-                if (receiveSendByte == 0) {
+        /*
+        for (int i = 0; i < bytesInfo; i++) {
+            printf("buf_information = 0x%02X, bytesInfo: %d\n", (unsigned int)(buf_information[i] & 0xFF), bytesInfo);
+        }
+
+        for (int i = 1; i < bytesInfo - 6; i++) {
+            printf("buf_information[i + 4] = 0x%02X\n", (unsigned int)(buf_information[i + 4] & 0xFF));
+        }
+        */
+
+        printf("buf_information[nbytes - 2] = 0x%02X\n", (unsigned int)(buf_information[bytesInfo - 2] & 0xFF));
+        printf("bcc2 = %d\n", bcc2);
+
+        printf("receiveSendByte = %d\n", receiveSendByte);
+        printf("sendReceiveValidate = %d\n", sendReceiveValidate);
+
+        if (buf_information[bytesInfo - 2] == bcc2) { // verificar que bcc2 está correto
+
+            if (receiveSendByte != sendReceiveValidate) { // trama duplicada. Discartar informação
+                if (receiveSendByte == 0) { // ignora dados da trama
                     responseByte = 0x85; // RR1
                     sendReceiveValidate = 1;
                 }
@@ -289,9 +286,9 @@ int llread(int fd, unsigned char *packet) {
                     sendReceiveValidate = 0;
                 }
             }
-            else { // new trama
-                for (int i = 0; i < nbytes - 6; i++) {
-                    packet[i] = buf_information[4 + i];
+            else { // nova trama
+                for (int i = 0; i < nbytes - 6; i++) { 
+                    packet[i] = buf_information[4 + i]; // passa a informação para a packet
                 }
 
                 bufferIsFull = TRUE;
@@ -307,8 +304,8 @@ int llread(int fd, unsigned char *packet) {
             }
         }
         else { // if bcc2 is not correct
-            if (receiveSendByte != sendReceiveValidate) { // valor de controlo no read for diferente no write, respetivamente
-                if (receiveSendByte == 0) {
+            if (receiveSendByte != sendReceiveValidate) { // trama duplicada
+                if (receiveSendByte == 0) { // ignora frama data
                     responseByte = 0x85; // RR1
                     sendReceiveValidate = 1;
                 }
@@ -318,7 +315,7 @@ int llread(int fd, unsigned char *packet) {
                 }
             }
             else { // new trama
-                if (receiveSendByte == 0) {
+                if (receiveSendByte == 0) { // ignora frame data por causa do erro
                     responseByte = 0x01; // REJ0
                     sendReceiveValidate = 0;
                 }
@@ -341,6 +338,8 @@ int llread(int fd, unsigned char *packet) {
         
         int bytesWrite = write(fd, buf_super, BUF_SIZE);
 
+        sleep(1);
+
         if (bytesWrite < 0) {
             sleep(1);
 
@@ -350,7 +349,7 @@ int llread(int fd, unsigned char *packet) {
             }
         }
 
-        printf("Supervision trama has been sent");
+        printf("Supervision trama has been sent\n");
     }
 
     fullLength = nbytes - 6;
@@ -363,6 +362,7 @@ int llread(int fd, unsigned char *packet) {
 ////////////////////////////////////////////////
 int llclose(int fd)
 {
+    alarmCount = 0;
     unsigned char buf_disc_trans[BUF_SIZE + 1] = {0};
 
     unsigned char buf_trans[BUF_SIZE + 1] = {0};
@@ -375,39 +375,40 @@ int llclose(int fd)
    
     unsigned char buf_rec[BUF_SIZE + 1] = {0};
     unsigned char buf_ua[BUF_SIZE + 1] = {FLAG_BLOCK, A_BLOCK_UA, C_BLOCK_UA, BCC_BLOCK_UA, FLAG_BLOCK, '\n'};
+    int end = FALSE;
 
     (void)signal(SIGALRM, alarmHandler);
 
-    int count = 0;
-    while (count <= 3) { // mudou para 3
+    int countT = 0;
+    int countR = 0;
+    while (!end) { 
         if (connectionType == TRANSMITTER) {
-            if (count > 0) { // mudei para > 0
-                write(fd, buf_ua, 5);
-                printf("Sent a UA trama");
-                count++;
+            if (countT > 0) {
+                write(fd, buf_ua, BUF_SIZE);
             } 
             else {
-                printf("Sent a Disconnect trama");
-                setStateMachineTransmitter(fd, buf_trans, buf_disc_trans, 0x01, C_BLOCK_DISC); // 0x03 pq é reply do receiver
-                count++;
+                //printf("Sent a Disconnect trama");
+                setStateMachineTransmitter(fd, buf_trans, buf_disc_trans, 0x01, C_BLOCK_DISC);
+                countT++;
 
                 if (buf_trans[2] != C_BLOCK_DISC) {
                     printf("Not a Disconnect trama");
-                    count = 0;
+                    countT = 0;
                 }
             }
         }
 
         else if (connectionType == RECEIVER) {
-            if (count > 0) { // mudei para > 0
+            if (countR > 0) { 
+                printf("Waiting for UA response\n");
                 setStateMachineReceiverDisc(fd, buf_rec, A_BLOCK_UA, C_BLOCK_UA);
-                printf("Received UA trama");
-                count++;
+                printf("Received UA trama\n");
+                end = TRUE;
                 break;
             }
             else {
                 setStateMachineReceiverDisc(fd, buf_rec, A_BLOCK_DISC_TRANS, C_BLOCK_DISC);
-                count++;
+                countR++;
                 buf_rec[0] = FLAG_BLOCK;
                 buf_rec[1] = 0x01;
                 buf_rec[2] = C_BLOCK_DISC;
@@ -421,11 +422,15 @@ int llclose(int fd)
 
                 if (buf_rec[2] != C_BLOCK_DISC) {
                     printf("Not a Disconnect trama");
-                    count = 0;
+                    countR = 0;
                 }
             }
         }
-        else count = 0;
+        else {
+            countR = 0;
+            countT = 0;
+            }
+
     }
 
     sleep(1);
@@ -457,13 +462,13 @@ int byte_stuffing(unsigned char* new_message, int bufSize) {
     for (int i = 4; i < (bufSize + 6); i++) {
         if (tmp[i] == FLAG_BLOCK && i != (bufSize + 5)) {
             new_message[newLength] = 0x7D;
-            new_message[newLength+1] = 0x5E;
+            new_message[newLength + 1] = 0x5E;
             newLength = newLength + 2;
         }
 
         else if (tmp[i] == 0x7D && i != (bufSize + 5)) {
             new_message[newLength] = 0x7D;
-            new_message[newLength+1] = 0x5D;
+            new_message[newLength + 1] = 0x5D;
             newLength = newLength + 2;
         }
 

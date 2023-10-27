@@ -61,7 +61,7 @@ int controlPackConstructor(unsigned char startEnd, unsigned char *packet, int fi
 }
 
 
-int dataPackReader(unsigned char *packet, unsigned char *message){
+int dataPackReader(unsigned char *packet, unsigned char *message) {
     if (packet[0] != C_DATA) return -1;
 
     int messageSize = 256 * packet[1] + packet[2];
@@ -74,18 +74,18 @@ int dataPackReader(unsigned char *packet, unsigned char *message){
 }
 
 
-int controlPackReader(unsigned char *packet, int fileSize, char *fileName){ // fileSize com ou sem pointer??
+int controlPackReader(unsigned char *packet, int* fileSize, char *fileName) {
     int lenFileSize;
 
     if (packet[0] != C_START && packet[0] != C_END) return -1;
 
     if (packet[1] == 0) { // Type of file size is 0
 
-        fileSize = 0;
+        *fileSize = 0;
         lenFileSize = (int) packet[2];
 
-        for (int i = 3; i < lenFileSize; i++){
-            fileSize = fileSize * 256 + (int) packet[i];
+        for (int i = 3; i < lenFileSize + 3; i++){
+            *fileSize = *fileSize * 256 + (int) packet[i];
         }
     } 
     else return -1;
@@ -125,7 +125,7 @@ int sendFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
     int fd = llopen(ll);
     if (fd < 0) return -1;
 
-    unsigned char packet[1029*2 + 5];
+    unsigned char packet[MAX_SIZE];
     int fileSize = (int) getFileSize(file);
     printf("FileSize: %d\n", fileSize);
 
@@ -134,24 +134,29 @@ int sendFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
     int packetLen = controlPackConstructor(C_START, packet, fileSize, fileName);
     printf("control pack size: %d\n", packetLen);
 
+    printf("CALLED LLWRITE HEREEEEEEEE 1 \n");
     if (llwrite(fd, packet, packetLen) < 0) {
+        printf("GOT HERE 1 \n");
         fclose(file);
         return -1;
     } 
-    printf("GOT HERE\n");
     unsigned char message[MAX_SIZE];
     unsigned int lenRead;
     unsigned char *data_package;
 
+    printf("GOT HERE 2 \n");
     while (TRUE) {
         lenRead = fread(&message, sizeof(unsigned char), MAX_SIZE, file);
+        printf("GOT HERE 3 \n");
 
         if (lenRead != MAX_SIZE) {
             if (feof(file)) {
+                printf("GOT HERE 4 \n");
                 data_package = dataPackConstructor(message, packetLen);
                 packetLen += 3;
-
+                printf("CALLED LLWRITE HEREEEEEEEE 2 \n");
                 if (llwrite(fd, data_package, packetLen) < 0) {
+                    printf("GOT HERE 5 \n");
                     fclose(file);
                     return -1;
                 } 
@@ -159,25 +164,27 @@ int sendFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
             } 
             else return -1;
         }
-
         data_package = dataPackConstructor(message, packetLen);
         packetLen += 3;
 
+        printf("CALLED LLWRITE HEREEEEEEEE 3 \n");
         if (llwrite(fd, data_package, packetLen) < 0) {
             fclose(file);
             return -1;
         }
     }
-    
+    printf("GOT HERE 6 \n");
     packetLen = controlPackConstructor(C_END, packet, fileSize, fileName);
-
+    printf("GOT HERE 7 \n");
     /*------------------------------------END--------------------------------------------*/
 
+    printf("CALLED LLWRITE HEREEEEEEEE 4\n");
     if (llwrite(fd, packet, packetLen) < 0) {
         fclose(file);
         return -1;
     }
 
+    printf("CALLED LLCOSEEEEEEEEE\n");
     if (llclose(fd) < 0) {
         fclose(file);
         return -1;
@@ -204,15 +211,16 @@ int readFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
     if (fd < 0) return -1;
 
     unsigned char packet[1029 * 2 + 5];
+    printf("CALLED READ HEREEEEEEEE 1\n");
     int packetSize = llread(fd, packet);
-    printf("Packet Size Read: %d", packetSize);
+    printf("Packet Size Read: %d\n", packetSize);
 
     if (packetSize < 0) return -1;
 
     int fileSize = 0;
 
     if (packet[0] == C_START) {
-        if (controlPackReader(packet, fileSize, fileName) < 0) return -1;
+        if (controlPackReader(packet, &fileSize, fileName) < 0) return -1;
     }
     else return -1;
 
@@ -225,27 +233,34 @@ int readFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
     unsigned char message[MAX_SIZE];
 
     while (TRUE) {
+        printf("CALLED READ HEREEEEEEEE 2\n");
         packetSize = llread(fd, packet);
         if (packetSize < 0) return -1;
 
         if (packet[0] == C_DATA) {
+            printf("GOT HERE READ 6 \n");
             if (dataPackReader(packet, message) < 0) return -1;
 
             int messageLen = packetSize - 3;
 
-            if (fwrite(&message, sizeof(unsigned char), messageLen, file) != messageLen) return -1;
+            if (fwrite(message, sizeof(unsigned char), messageLen, file) != messageLen) return -1;
         }
         else if (packet[0] == C_END) break;
         else return -1;
     }
 
-    int fileSize1 = 0;
-    char* fileName1 = 0;
+    int fileSize1;
+    char fileName1[255];
 
-    if (controlPackReader(packet, fileSize1, fileName1) < 0) return -1;
+    if (controlPackReader(packet, &fileSize1, fileName1) < 0) return -1;
 
     if (strcmp(fileName, fileName1) != 0) return -1;
+
+    printf("GOT HERE READ 11 \n");
+
     if (fileSize != fileSize1) return -1;
+
+    printf("GOT HERE READ 12 \n");
     
     if (llclose(fd) < 0){
         fclose(file);

@@ -9,7 +9,7 @@
 
 #define BAUDRATE 9600
 #define N_TRIES 3
-#define TIMEOUT 1
+#define TIMEOUT 2
 
 extern int state;
 

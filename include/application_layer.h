@@ -22,7 +22,7 @@ unsigned char* dataPackConstructor(unsigned char* message, int bufSize);
 int controlPackConstructor(unsigned char startEnd, unsigned char *packet, int fileSize, char *fileName);
 
 int dataPackReader(unsigned char *packet, unsigned char *message);
-int controlPackReader(unsigned char *packet, int fileSize, char *fileName);
+int controlPackReader(unsigned char *packet, int* fileSize, char *fileName);
 
 int sendFile(char serialPort[50], char *fileName, int baudRate, int nRetransmissions, int timeout);
 int readFile(char serialPort[50], char *fileName, int baudRate, int nRetransmissions, int timeout);
