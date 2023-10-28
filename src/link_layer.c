@@ -172,31 +172,36 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     (void)signal(SIGALRM, alarmHandler);
     
     while (!sentData) {
-        resend = setStateMachineWrite(fd, buf_inf, fullLength, bytesWritten, frameNumberByte);
-        
+        resend = setStateMachineWrite(fd, buf_inf, fullLength, bytesWritten, frameNumberByte); // envia a Trama I e aguarda pela trama S do receiver. Recebendo-a, verifica se está em ordem
+
         // printf("Received S Trama\n");
 
         // printf("Resend LinkLayer llwrite: %d\n", resend);
-        // printf("repeat: %d\n", repeat);
-        // printf("resend: %d\n", resend);
+        printf("repeat: %d\n", repeat);
+        printf("resend: %d\n", resend);
 
-        if (resend == 1) {
-            printf("Received REJ. Sending another Trama. RESEND: %d\n", resend);
+        if (resend == 2) {
+            printf("Sent END packet, ending llwrite...\n"); 
+            break;
         }
 
-        else if (resend == 0 && repeat == 0) {
+        if (resend == 1) { // Significa que recebeu REJ
+            printf("Received REJ. Sending another Trama. RESEND: %d\n", resend); 
+        }
+
+        else if (resend == 0 && repeat == 0) { // Significa que enviou duas tramas I. Termina o ciclo
             sentData = TRUE;
             printf("sentData\n");
         }
 
-        else if (resend == 0 && repeat == 1) {
+        else if (resend == 0 && repeat == 1) { // Significa que enviou a primeira trama I. Repeat = 1 para que possa repetir enviar outra trama I
             repeat = 0;
             printf("repeat\n");
             continue;
         }
     }
 
-    switch (sendReceiveValidate) {
+    switch (sendReceiveValidate) { // trocar o frame number após receber a resposta
         case 0:
             sendReceiveValidate = 1;
             break;
@@ -209,7 +214,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     }  
     printf("bytesWritten: %d\n", bytesWritten);
 
-    return bytesWritten; // troquei totalBufferSize por fullLength
+    return bytesWritten;
 }
 
 ////////////////////////////////////////////////
@@ -226,7 +231,7 @@ int llread(int fd, unsigned char *packet) {
     while (!bufferIsFull) {
         printf("HERE 3\n");
     
-        bytesInfo = setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS);
+        bytesInfo = setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS); // aguarda trama I e cria-a na variável buf_information. Retorna o tamanho da trama I
 
         printf("Received I Trama. Bytes Received: %d\n", bytesInfo);
 
@@ -243,7 +248,7 @@ int llread(int fd, unsigned char *packet) {
         }
 
         int receiveSendByte;
-        if (buf_information[2] == 0x00) {
+        if (buf_information[2] == 0x00) { // retira o número do frame da trama I enviada
             //printf("buf_information[2] = 0x%02X\n\n", (unsigned int)(buf_information[2] & 0xFF));
             receiveSendByte = 0;
         }
@@ -336,6 +341,7 @@ int llread(int fd, unsigned char *packet) {
         buf_super[5] = '\n';
         
         int bytesWrite = write(fd, buf_super, BUF_SIZE);
+        printf("Supervision trama has been sent\n");
 
         sleep(1);
 
@@ -347,8 +353,6 @@ int llread(int fd, unsigned char *packet) {
                 return -1;
             }
         }
-
-        printf("Supervision trama has been sent\n");
     }
 
     fullLength = nbytes - 6;
@@ -373,7 +377,7 @@ int llclose(int fd)
     buf_trans[5] = '\n';
    
     unsigned char buf_rec[BUF_SIZE + 1] = {0};
-    unsigned char buf_ua[BUF_SIZE + 1] = {FLAG_BLOCK, A_BLOCK_UA, C_BLOCK_UA, BCC_BLOCK_UA, FLAG_BLOCK, '\n'};
+    unsigned char buf_ua[BUF_SIZE + 1] = {FLAG_BLOCK, A_BLOCK_UA, C_BLOCK_UA, 0x01 ^ 0x07, FLAG_BLOCK, '\n'};
     int end = FALSE;
 
     (void)signal(SIGALRM, alarmHandler);
@@ -383,15 +387,17 @@ int llclose(int fd)
     while (!end) { 
         if (connectionType == TRANSMITTER) {
             if (countT > 0) {
+                printf("Sent the last Disconnect trama\n");
                 write(fd, buf_ua, BUF_SIZE);
+                break;
             } 
             else {
-                //printf("Sent a Disconnect trama");
+                printf("Sent a Disconnect trama\n");
                 setStateMachineTransmitter(fd, buf_trans, buf_disc_trans, 0x01, C_BLOCK_DISC);
                 countT++;
 
                 if (buf_trans[2] != C_BLOCK_DISC) {
-                    printf("Not a Disconnect trama");
+                    printf("Not a Disconnect trama\n");
                     countT = 0;
                 }
             }
@@ -407,6 +413,7 @@ int llclose(int fd)
             }
             else {
                 setStateMachineReceiverDisc(fd, buf_rec, A_BLOCK_DISC_TRANS, C_BLOCK_DISC);
+                printf("Received a Disconnect trama\n");
                 countR++;
                 buf_rec[0] = FLAG_BLOCK;
                 buf_rec[1] = 0x01;
@@ -417,7 +424,7 @@ int llclose(int fd)
 
                 write(fd, buf_rec, BUF_SIZE);
 
-                printf("Received a Disconnect trama");
+                printf("Sending Disconnect Trama\n");
 
                 if (buf_rec[2] != C_BLOCK_DISC) {
                     printf("Not a Disconnect trama");

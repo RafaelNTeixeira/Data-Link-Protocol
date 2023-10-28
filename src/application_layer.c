@@ -149,11 +149,12 @@ int sendFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
         lenRead = fread(&message, sizeof(unsigned char), MAX_SIZE, file);
         printf("GOT HERE 3 \n");
 
-        if (lenRead != MAX_SIZE) {
+        if (lenRead != MAX_SIZE) { // tamanho máximo de um data packet
             if (feof(file)) {
                 printf("GOT HERE 4 \n");
                 data_package = dataPackConstructor(message, packetLen);
                 packetLen += 3;
+                
                 printf("CALLED LLWRITE HEREEEEEEEE 2 \n");
                 if (llwrite(fd, data_package, packetLen) < 0) {
                     printf("GOT HERE 5 \n");
