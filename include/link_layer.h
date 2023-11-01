@@ -16,14 +16,12 @@
 #include "state_machine.h"
 #include "transmitter.h"
 
-typedef enum
-{
+typedef enum {
     LlTx, // 0
     LlRx, // 1
 } LinkLayerRole;
 
-typedef struct
-{
+typedef struct {
     char serialPort[50];
     LinkLayerRole role;
     int baudRate;
@@ -31,11 +29,11 @@ typedef struct
     int timeout;
 } LinkLayer;
 
-#define BAUDRATE 9600
-
 // SIZE of maximum acceptable payload.
 // Maximum number of bytes that application layer should send to link layer
 #define MAX_PAYLOAD_SIZE 1000
+
+#define BAUDRATE 9600
 
 // MISC
 #define FALSE 0

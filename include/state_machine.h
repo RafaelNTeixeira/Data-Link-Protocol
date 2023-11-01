@@ -32,7 +32,7 @@
 #define END 0x03
 
 void alarmHandler(int signal);
-void setStateMachineTransmitter(int fd, unsigned char *buf_set, unsigned char *buf, u_int8_t a_block, u_int8_t c_block);
+int setStateMachineTransmitter(int fd, unsigned char *buf_set, unsigned char *buf, u_int8_t a_block, u_int8_t c_block);
 void setStateMachineReceiver(int fd, unsigned char *buf, u_int8_t a_block, u_int8_t c_block);
 int setStateMachineWrite(int fd, unsigned char *buf, int size, int* bytesWritten, unsigned char* frameNumberByte);
 int setStateMachineReceiverInf(int fd, unsigned char *buf, unsigned char* buf_information, u_int8_t a_block);
