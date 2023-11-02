@@ -125,8 +125,6 @@ int llopen(LinkLayer connectionParameters)
 // LLWRITE
 ////////////////////////////////////////////////
 int llwrite(int fd, const unsigned char *buf, int bufSize) {
-    alarmCount = 0;
-
     if (sendReceiveValidate == 0) {
         frameNumberByte = 0x00;
     }
@@ -191,6 +189,8 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
     while (!sentData) {
         resend = setStateMachineWrite(fd, buf_inf, fullLength, &bytesWritten, &frameNumberByte); // envia a Trama I e aguarda pela trama S do receiver. Recebendo-a, verifica se está em ordem
 
+        if (resend == -1) return -1;
+
         if (resend == 1) { // Significa que recebeu REJ
             printf("Received REJ. Sending another Trama. RESEND: %d\n", resend); 
         }
@@ -225,13 +225,13 @@ int llread(int fd, unsigned char *packet) {
     int bytesInfo;
     int bufferIsFull = FALSE;
 
-    unsigned char buf_information[1024];
-    unsigned char buf_inf[1024];
+    unsigned char buf_information[1029*2 + 6];
+    unsigned char buf_inf[1029*2 + 6];
 
     while (!bufferIsFull) {
         printf("HERE 3\n");
     
-        bytesInfo = setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS); // aguarda trama I e cria-a na variável buf_information. Retorna o tamanho da trama I
+        bytesInfo = setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS); // aguarda trama I e cria-a na variável buf_information. Retorna o tamanho do data packet + bcc2, w/stuffing
 
         printf("Received I Trama. Bytes Received: %d\n", bytesInfo);
 
@@ -260,27 +260,28 @@ int llread(int fd, unsigned char *packet) {
         printf("bcc2 = 0x%02X\n", (unsigned int)(bcc2 & 0xFF));
 
 
-        for (int i = 1; i < bytesInfo - 6; i++) {
+        for (int i = 1; i < nbytes - 6; i++) {
             bcc2 ^= buf_information[i + 4];
             //printf("bcc2 ^= 0x%02X\n", (unsigned int)(buf_information[i + 4] & 0xFF));
         }
 
-        
-        for (int i = 0; i < bytesInfo; i++) {
+        /*
+        for (int i = 0; i < nbytes; i++) {
             printf("buf_information = 0x%02X, bytesInfo: %d\n", (unsigned int)(buf_information[i] & 0xFF), bytesInfo);
         }
 
-        for (int i = 1; i < bytesInfo - 6; i++) {
+        for (int i = 1; i < nbytes - 6; i++) {
             printf("buf_information[i + 4] = 0x%02X\n", (unsigned int)(buf_information[i + 4] & 0xFF));
         }
         
-        printf("buf_information[nbytes - 2] = 0x%02X\n", (unsigned int)(buf_information[bytesInfo - 2] & 0xFF));
+        printf("buf_information[nbytes - 2] = 0x%02X\n", (unsigned int)(buf_information[nbytes - 2] & 0xFF));
         printf("bcc2 = 0x%02X\n", (unsigned int)(bcc2 & 0xFF));
+        */
 
         printf("receiveSendByte = %d\n", receiveSendByte);
-        printf("sendReceiveValidate = %d\n", sendReceiveValidate);
+        
 
-        if (buf_information[bytesInfo - 2] == bcc2) { // verificar que bcc2 está correto
+        if (buf_information[nbytes - 2] == bcc2) { // verificar que bcc2 está correto
             if (receiveSendByte != sendReceiveValidate) { // trama duplicada. Discartar informação
                 if (receiveSendByte == 0) { // ignora dados da trama
                     responseByte = 0x85; // RR1
@@ -331,6 +332,7 @@ int llread(int fd, unsigned char *packet) {
             }
         }
 
+        printf("sendReceiveValidate = %d\n", sendReceiveValidate);
         // create S trama
         unsigned char buf_super[BUF_SIZE + 1];
 
@@ -394,7 +396,7 @@ int llclose(int fd)
             } 
             else {
                 printf("Sent a Disconnect trama\n");
-                setStateMachineTransmitter(fd, buf_trans, buf_disc_trans, 0x01, C_BLOCK_DISC);
+                if (setStateMachineTransmitter(fd, buf_trans, buf_disc_trans, 0x01, C_BLOCK_DISC) >= tries) return -1;
                 countT++;
 
                 if (buf_trans[2] != C_BLOCK_DISC) {

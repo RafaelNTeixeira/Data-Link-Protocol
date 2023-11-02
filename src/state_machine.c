@@ -20,13 +20,13 @@ void alarmHandler(int signal)
 
 int setStateMachineTransmitter(int fd, unsigned char *buf_set, unsigned char *buf, u_int8_t a_block, u_int8_t c_block) {
     state = START;
-    int bytesW;
+    //int bytesW;
 
     while (alarmCount < tries && state != STOP) {
         if (alarmEnabled == FALSE)
         {
-            bytesW = write(fd, buf_set, BUF_SIZE);
-            //write(fd, buf_set, BUF_SIZE);
+            //bytesW = write(fd, buf_set, BUF_SIZE);
+            write(fd, buf_set, BUF_SIZE);
             
             //printf("buf_set = 0x%02X\nbytes written:%d\n", (unsigned int)(buf_set[0] & 0xFF), bytesW);
             //printf("buf_set = 0x%02X\nbytes written:%d\n", (unsigned int)(buf_set[1] & 0xFF), bytesW);
@@ -168,8 +168,8 @@ int setStateMachineWrite(int fd, unsigned char *buf, int size, int* bytesWritten
                     break; 
 
                 case FLAG_RCV:
-                    printf("FLAG\n");
-                    printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
+                    //printf("FLAG\n");
+                    //printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
                     if (buf_super[0] ==  0x03) {
                         state = A_RCV;
                     }
@@ -182,17 +182,21 @@ int setStateMachineWrite(int fd, unsigned char *buf, int size, int* bytesWritten
                     break;
 
                 case A_RCV:
-                    printf("A\n");
-                    printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
+                    //printf("A\n");
+                    //printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
                     if (buf_super[0] == wantedBytes[0]) {
+                        if (*frameNumberByte == 0x00) printf("FrameNumber: 0\n");
+                        if (*frameNumberByte == 0x40) printf("FrameNumber: 1\n");
                         resend = 0;
-                        printf("GOT INSIDE RR. Resend: %d\n", resend);
+                        printf("GOT INSIDE RR. RESPONSE: %d\n", wantedBytes[0]);
                         c_block = buf_super[0];
                         state = C_RCV;
                     }
                     else if (buf_super[0] == wantedBytes[1]) {
+                        if (*frameNumberByte == 0x00) printf("FrameNumber: 0\n");
+                        if (*frameNumberByte == 0x40) printf("FrameNumber: 1\n");
                         resend = 1;
-                        printf("GOT INSIDE REJ. Resend: %d\n", resend);
+                        printf("GOT INSIDE REJ. RESPONSE: %d\n", wantedBytes[1]);
                         c_block = buf_super[0];
                         state = C_RCV;
                     }
@@ -205,8 +209,8 @@ int setStateMachineWrite(int fd, unsigned char *buf, int size, int* bytesWritten
                     break;
 
                 case C_RCV:
-                    printf("C\n");
-                    printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
+                    //printf("C\n");
+                    //printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
                     if (buf_super[0] == (0x03 ^ c_block)) {
                         state = BCC_OK;
                     }
@@ -219,8 +223,8 @@ int setStateMachineWrite(int fd, unsigned char *buf, int size, int* bytesWritten
                     break;
 
                 case BCC_OK:
-                    printf("BCC_OK\n");
-                    printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
+                    //printf("BCC_OK\n");
+                    //printf("buf_super = 0x%02X,%d\n", (unsigned int)(buf_super[0] & 0xFF), bytes);
                     if (buf_super[0] == FLAG_BLOCK) {
                         state = STOP;
                         printf("DONE!!!\n");
@@ -234,9 +238,10 @@ int setStateMachineWrite(int fd, unsigned char *buf, int size, int* bytesWritten
                     break;
 
                 case STOP:
-                    return;
+                    break;
             }
         }    
+        if (alarmCount >= tries) return -1;
     }
     return resend;
 }
@@ -329,11 +334,12 @@ void setStateMachineReceiver(int fd, unsigned char *buf, u_int8_t a_block, u_int
 
 int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_information, u_int8_t a_block) {
     int i = 0;
+    int data_size = 0;
     state = START;
 
     while (state != STOP) {
         int bytes = read(fd, buf, 1);
-        if (bytes > 0) printf("buf = 0x%02X\n%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
+        //if (bytes > 0) printf("buf = 0x%02X\n%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
 
         if (bytes > 0) {
             switch(state) {
@@ -349,8 +355,8 @@ int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_in
                     break; 
 
                 case FLAG_RCV:
-                    printf("FLAG\n");
-                    printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
+                    //printf("FLAG\n");
+                    //printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
                     if (buf[0] == a_block) {
                         buf_information[i++] = buf[0];
                         //printf("buf_information = 0x%02X\n", (unsigned int)(buf_information[i-1] & 0xFF));
@@ -366,8 +372,8 @@ int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_in
                     break;
 
                 case A_RCV:
-                    printf("A\n");
-                    printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
+                    //printf("A\n");
+                    //printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
                     if (buf[0] == 0x00 || buf[0] == 0x40) {
                         buf_information[i++] = buf[0];
                         //printf("buf_information = 0x%02X\n", (unsigned int)(buf_information[i-1] & 0xFF));
@@ -384,8 +390,8 @@ int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_in
                     break;
 
                 case C_RCV:
-                    printf("C\n");
-                    printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
+                    //printf("C\n");
+                    //printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
                     if (buf[0] == (a_block ^ 0x00) || buf[0] == (a_block ^ 0x40)) {
                         buf_information[i++] = buf[0];
                         //printf("buf_information = 0x%02X\n", (unsigned int)(buf_information[i-1] & 0xFF));
@@ -402,8 +408,8 @@ int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_in
                     break;
 
                 case BCC_OK:
-                    printf("BCC_OK\n");
-                    printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
+                    //printf("BCC_OK\n");
+                    //printf("buf = 0x%02X,%d\n", (unsigned int)(buf[0] & 0xFF), bytes);
                     if (buf[0] == FLAG_BLOCK) {
                         buf_information[i] = buf[0];
                         //printf("buf_information = 0x%02X\n", (unsigned int)(buf_information[i] & 0xFF));
@@ -413,6 +419,7 @@ int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_in
                     }
                     else {
                         buf_information[i++] = buf[0];
+                        data_size++;
                         //printf("buf_information = 0x%02X\n", (unsigned int)(buf_information[i-1] & 0xFF));
                     }
                     break;
@@ -422,7 +429,7 @@ int setStateMachineReceiverInf(int fd, unsigned char* buf, unsigned char* buf_in
             }
         }    
     }
-    return (i + 1);
+    return data_size;
 }
 
 int setStateMachineReceiverSup(int fd, unsigned char* buf, u_int8_t a_block, unsigned char* wantedBytes) {

@@ -153,11 +153,11 @@ int sendFile(char* serialPort, char* fileName, int baudRate, int nRetransmission
         if (lenRead != MAX_SIZE) { // tamanho máximo de um data packet
             if (feof(file)) {
                 printf("GOT HERE 4 \n");
-                data_package = dataPackConstructor(message, packetLen);
-                packetLen += 3;
+                data_package = dataPackConstructor(message, lenRead);
+                lenRead += 3;
                 
                 printf("CALLED LLWRITE HEREEEEEEEE 2 \n");
-                if (llwrite(fd, data_package, packetLen) < 0) {
+                if (llwrite(fd, data_package, lenRead) < 0) {
                     printf("GOT HERE 5 \n");
                     fclose(file);
                     return -1;
@@ -166,11 +166,11 @@ int sendFile(char* serialPort, char* fileName, int baudRate, int nRetransmission
             } 
             else return -1;
         }
-        data_package = dataPackConstructor(message, packetLen);
-        packetLen += 3;
+        data_package = dataPackConstructor(message, lenRead);
+        lenRead += 3;
 
         printf("CALLED LLWRITE HEREEEEEEEE 3 \n");
-        if (llwrite(fd, data_package, packetLen) < 0) {
+        if (llwrite(fd, data_package, lenRead) < 0) {
             fclose(file);
             return -1;
         }
