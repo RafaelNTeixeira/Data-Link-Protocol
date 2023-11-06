@@ -178,7 +178,7 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
             return -1;
         }
     }
-    printf("fullLength size: %d\n", fullLength);
+
     int bytesWritten = 0;
     int sentData = FALSE;
     alarmEnabled = FALSE;
@@ -460,7 +460,7 @@ int llclose(int fd)
 }
 
 int byte_stuffing(unsigned char* new_message, int bufSize) {
-    unsigned char tmp[bufSize + 6];
+    unsigned char tmp[bufSize + 6]; // tamanho da packet + 6 bytes para o frame header e tail
 
     for (int i = 0; i < bufSize + 6 ; i++) {
         tmp[i] = new_message[i];

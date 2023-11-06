@@ -201,6 +201,8 @@ int sendFile(char* serialPort, char* fileName, int baudRate, int nRetransmission
 int readFile(char* serialPort, char *fileName, int baudRate, int nRetransmissions, int timeout) {
     if (fileName == NULL) return -1;
 
+    //srand(time(0));
+
     printf("Filename: %s\n", fileName);
 
     LinkLayer ll;
@@ -213,8 +215,11 @@ int readFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
 
     int fd = llopen(ll);
     if (fd < 0) return -1;
+    //gettimeofday(&start , NULL);
 
-    unsigned char packet[MAX_SIZE];
+    //usleep(50000);
+
+    unsigned char packet[1029*2 + 6];
     printf("CALLED READ HEREEEEEEEE 1\n");
     int packetSize = llread(fd, packet);
     printf("Packet Size Read: %d\n", packetSize);
@@ -229,7 +234,7 @@ int readFile(char* serialPort, char *fileName, int baudRate, int nRetransmission
     else return -1;
 
     FILE* file;
-    file = fopen("penguin-received.gif", "w");
+    file = fopen("penguin-received.jpg", "w");
     if (file == NULL) return -1;
 
     unsigned char message[MAX_SIZE];   
