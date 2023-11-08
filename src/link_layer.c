@@ -13,7 +13,7 @@ int connectionType;
 int tries;
 int timeout;
 int sendReceiveValidate;
-int fullLength = 0; // troquei totalBufferSize por fullLength
+int fullLength = 0;
 u_int8_t responseByte;
 unsigned char frameNumberByte = 0x00;
 
@@ -26,9 +26,7 @@ int llopen(LinkLayer connectionParameters)
 {
     // Open serial port device for reading and writing and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
-    printf("serialPort: %s\nrole: %d\n", connectionParameters.serialPort, connectionParameters.role);
     int fd = open(connectionParameters.serialPort, O_RDWR | O_NOCTTY);
-    printf("FD OPEN: %d\n", fd);
     if (fd < 0)
     {
         perror(connectionParameters.serialPort);
@@ -94,13 +92,12 @@ int llopen(LinkLayer connectionParameters)
 
     switch (connectionParameters.role) {
         case LlTx:
-            printf("Sent a SET Trama\n");
             alarm = setStateMachineTransmitter(fd, buf_set, buf_ua, 0x03, C_BLOCK_UA); // envia set e analisa ua
-            printf("GOT HERE AFTER STATE MACHINE, alarm = %d\n", alarm);
             if (alarm == tries) return -1;
             break;
  
         case LlRx:
+            printf("Waiting for SET Trama\n");
             setStateMachineReceiver(fd, buf_s, 0x03, C_BLOCK_UA); // analisa set e envia ua
             printf("Sent a UA Trama\n");
             break;
@@ -110,13 +107,6 @@ int llopen(LinkLayer connectionParameters)
     }
 
     sleep(1);
-
-    /*
-    if (tcsetattr(fd, TCSANOW, &oldtio) == -1) {
-        perror("tcsetattr");
-        return -1;
-    }
-    */
 
     return fd;
 }
@@ -132,7 +122,6 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
         frameNumberByte = 0x40;
     }
     
-    //createInformationTrama
     unsigned char buf_inf[bufSize];
 
     buf_inf[0] = FLAG_BLOCK;
@@ -150,25 +139,10 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
         bcc2 ^= buf[i];
     }
 
-    // ver os campos que vão criando o bcc2
-    /*
-    for (int i = 1; i < bufSize; i++) {
-        printf("bcc2 ^= 0x%02X\n", (unsigned int)(buf[i] & 0xFF));
-    }
-    */
-
     buf_inf[3 + bufSize + 1] = bcc2;
     buf_inf[3 + bufSize + 2] = FLAG_BLOCK;
 
-    // ver a trama I finalizada
-    /*
-    for (int i = 0; i < bufSize + 6; i++) {
-        printf("buf_information[i] = 0x%02X\n", (unsigned int)(buf_inf[i] & 0xFF));
-    }
-    */
-
     fullLength = byte_stuffing(buf_inf, bufSize);
-    printf("byte_stuffing size: %d\n", fullLength);
 
     if (fullLength < 0) {
         sleep(1);
@@ -195,9 +169,8 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
             printf("Received REJ. Sending another Trama. RESEND: %d\n", resend); 
         }
 
-        else if (resend == 0) { // Significa que enviou duas tramas I. Termina o ciclo
+        else if (resend == 0) { // Significa que enviou trama I com sucesso. Termina o ciclo
             sentData = TRUE;
-            printf("sentData\n");
         }
     }
 
@@ -212,7 +185,6 @@ int llwrite(int fd, const unsigned char *buf, int bufSize) {
         default:
             return -1;
     }  
-    printf("bytesWritten: %d\n", bytesWritten);
 
     return bytesWritten;
 }
@@ -225,18 +197,16 @@ int llread(int fd, unsigned char *packet) {
     int bytesInfo;
     int bufferIsFull = FALSE;
 
-    unsigned char buf_information[1029*2 + 6];
-    unsigned char buf_inf[1029*2 + 6];
+    unsigned char buf_information[(MAX_SIZE + 6)*2 + 6];
+    unsigned char buf_inf[(MAX_SIZE + 6)*2 + 6];
 
     while (!bufferIsFull) {
-        printf("HERE 3\n");
     
         bytesInfo = setStateMachineReceiverInf(fd, buf_inf, buf_information, A_BLOCK_INF_TRANS); // aguarda trama I e cria-a na variável buf_information. Retorna o tamanho do data packet + bcc2, w/stuffing
 
         printf("Received I Trama. Bytes Received: %d\n", bytesInfo);
 
         nbytes = byte_destuffing(buf_information, bytesInfo);
-        printf("Bytes destuffing: %d\n", nbytes);
 
         if (nbytes < 0) {
             sleep(1);
@@ -249,37 +219,16 @@ int llread(int fd, unsigned char *packet) {
 
         int receiveSendByte;
         if (buf_information[2] == 0x00) { // retira o número do frame da trama I enviada
-            //printf("buf_information[2] = 0x%02X\n\n", (unsigned int)(buf_information[2] & 0xFF));
             receiveSendByte = 0;
         }
         else if (buf_information[2] == 0x40) {
-            //printf("buf_information[2] = 0x%02X\n\n", (unsigned int)(buf_information[2] & 0xFF));
             receiveSendByte = 1;
         }
         unsigned char bcc2 = buf_information[4];
-        printf("bcc2 = 0x%02X\n", (unsigned int)(bcc2 & 0xFF));
-
 
         for (int i = 1; i < nbytes - 6; i++) {
             bcc2 ^= buf_information[i + 4];
-            //printf("bcc2 ^= 0x%02X\n", (unsigned int)(buf_information[i + 4] & 0xFF));
         }
-
-        /*
-        for (int i = 0; i < nbytes; i++) {
-            printf("buf_information = 0x%02X, bytesInfo: %d\n", (unsigned int)(buf_information[i] & 0xFF), bytesInfo);
-        }
-
-        for (int i = 1; i < nbytes - 6; i++) {
-            printf("buf_information[i + 4] = 0x%02X\n", (unsigned int)(buf_information[i + 4] & 0xFF));
-        }
-        
-        printf("buf_information[nbytes - 2] = 0x%02X\n", (unsigned int)(buf_information[nbytes - 2] & 0xFF));
-        printf("bcc2 = 0x%02X\n", (unsigned int)(bcc2 & 0xFF));
-        */
-
-        printf("receiveSendByte = %d\n", receiveSendByte);
-        
 
         if (buf_information[nbytes - 2] == bcc2) { // verificar que bcc2 está correto
             if (receiveSendByte != sendReceiveValidate) { // trama duplicada. Discartar informação
@@ -332,7 +281,6 @@ int llread(int fd, unsigned char *packet) {
             }
         }
 
-        printf("sendReceiveValidate = %d\n", sendReceiveValidate);
         // create S trama
         unsigned char buf_super[BUF_SIZE + 1];
 
@@ -345,8 +293,6 @@ int llread(int fd, unsigned char *packet) {
         
         int bytesWrite = write(fd, buf_super, BUF_SIZE);
         printf("Supervision trama has been sent\n");
-
-        sleep(1);
 
         if (bytesWrite < 0) {
             sleep(1);

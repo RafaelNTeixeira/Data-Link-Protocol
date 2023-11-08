@@ -14,6 +14,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include "state_machine.h"
+#include "application_layer.h"
 #include "transmitter.h"
 
 typedef enum {
@@ -33,7 +34,7 @@ typedef struct {
 // Maximum number of bytes that application layer should send to link layer
 #define MAX_PAYLOAD_SIZE 1000
 
-#define BAUDRATE 9600
+#define BAUDRATE 26000
 
 // MISC
 #define FALSE 0
@@ -44,6 +45,18 @@ typedef struct {
 #define TRANSMITTER 0
 #define RECEIVER 1
 
+#define FLAG 0x7E
+#define ADDRESS_1 0x03
+#define ADDRESS_2 0x07
+#define SET 0x03
+#define UA 0x07
+
+#define START 0
+#define FLAG_RCV 1
+#define A_RCV 2
+#define C_RCV 3
+#define BCC_OK 4
+#define STOP 5
 
 // Open a connection using the "port" parameters defined in struct linkLayer.
 // Return "1" on success or "-1" on error.

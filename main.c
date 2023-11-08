@@ -8,9 +8,10 @@
 #include "include/application_layer.h"
 
 #define N_TRIES 3
-#define TIMEOUT 2
+#define TIMEOUT 4
 
 extern int state;
+struct timeval Timeout;
 
 // Arguments:
 //   $1: /dev/ttySxx
