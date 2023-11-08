@@ -15,7 +15,6 @@
 #include <unistd.h>
 #include "state_machine.h"
 #include "application_layer.h"
-#include "transmitter.h"
 
 typedef enum {
     LlTx, // 0
